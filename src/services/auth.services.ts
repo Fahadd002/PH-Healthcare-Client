@@ -49,9 +49,17 @@ export async function getNewTokensWithRefreshToken(refreshToken  : string) : Pro
 export async function getUserInfo() {
     try {
         const cookieStore = await cookies();
-        const accessToken = cookieStore.get("accessToken")?.value;
+        const authCookieHeader = cookieStore
+            .getAll()
+            .filter((cookie) =>
+                cookie.name === "accessToken" ||
+                cookie.name === "refreshToken" ||
+                cookie.name === "better-auth.session_token"
+            )
+            .map((cookie) => `${cookie.name}=${cookie.value}`)
+            .join("; ");
 
-        if (!accessToken) {
+        if (!authCookieHeader) {
             return null;
         }
 
@@ -59,7 +67,7 @@ export async function getUserInfo() {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
-                Cookie: `accessToken=${accessToken}`
+                Cookie: authCookieHeader,
             }
         });
 
