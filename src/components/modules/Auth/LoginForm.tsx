@@ -11,6 +11,7 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 interface LoginFormProps {
@@ -18,36 +19,42 @@ interface LoginFormProps {
 }
 
 const LoginForm = ({ redirectPath }: LoginFormProps) => {
-    // const queryClient = useQueryClient();
-
+    const router = useRouter();
     const [serverError, setServerError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
 
-    const { mutateAsync , isPending} = useMutation({
-        mutationFn : (payload : ILoginPayload) => loginAction(payload, redirectPath),
-    })
+    const { mutateAsync, isPending } = useMutation({
+        mutationFn: (payload: ILoginPayload) => loginAction(payload, redirectPath),
+    });
 
     const form = useForm({
-        defaultValues : {
-            email : "",
-            password : "",
+        defaultValues: {
+            email: "",
+            password: "",
         },
 
-        onSubmit : async ({value}) => {
+        onSubmit: async ({ value }) => {
             setServerError(null);
             try {
                 const result = await mutateAsync(value) as any;
 
-                if(!result.success ){
+                if (result && typeof result === "object" && "success" in result && result.success === false) {
                     setServerError(result.message || "Login failed");
-                    return ;
+                    return;
                 }
-            } catch (error : any) {
-                console.log(`Login failed: ${error.message}`);
-                setServerError(`Login failed: ${error.message}`);
+
+                if (result?.redirectPath) {
+                    router.push(result.redirectPath);
+                    return;
+                }
+
+                router.push("/dashboard");
+            } catch (error: any) {
+                console.log(`Login failed: ${error?.message || "Unknown error"}`);
+                setServerError(`Login failed: ${error?.message || "Unknown error"}`);
             }
-        }
-    })
+        },
+    });
   return (
     <Card className="w-full max-w-md mx-auto shadow-md">
       <CardHeader className="text-center">
