@@ -3,13 +3,14 @@ import { cookies } from "next/headers";
 
 export const setCookie = async  (name: string, value: string, maxAgeInSeconds: number) => {
     const cookieStrore = await cookies();
+    const isProd = process.env.NODE_ENV === "production";
 
-    cookieStrore.set(  name,value,{
+    cookieStrore.set(name, value, {
         httpOnly: true,
-        secure: true,
+        secure: isProd,
         maxAge: maxAgeInSeconds,
         path: "/",
-        sameSite: "strict",
+        sameSite: isProd ? "strict" : "lax",
     });
 };
 

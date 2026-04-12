@@ -1,37 +1,58 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-'use server';
+"use server";
 
+import { getDefaultDashboardRoute, isValidRedirectForRole, UserRole } from "@/lib/authUtils";
 import { httpClient } from "@/lib/axios/httpClient";
-import { setTokenInCookie } from "@/lib/token.ulits";
+import { setTokenInCookies } from "@/lib/token.ulits";
 import { ApiErrorResponse } from "@/types/api.type";
 import { ILoginResponse } from "@/types/auth.type";
 import { ILoginPayload, loginZodSchema } from "@/zod/auth.validation";
-import { redirect } from "next/navigation";
 
+export const loginAction = async (
+    payload : ILoginPayload,
+    redirectPath ?: string
+) : Promise<(ILoginResponse & { redirectPath: string }) | ApiErrorResponse> => {
+    const parsedPayload = loginZodSchema.safeParse(payload);
 
-export const loginAction = async (payload: ILoginPayload): Promise<ILoginResponse | ApiErrorResponse> => {
-     const parsePayload = loginZodSchema.safeParse(payload);
-        if (!parsePayload.success) {
-            const firstError = parsePayload.error.issues[0].message || "Invalid input";
-            return {
-                message: firstError,
-                success: false,
-            }
-        }
-    try {   
-        const response = await httpClient.post<ILoginResponse>("/auth/login", payload);
-
-        const {accessToken, refreshToken, token} = response.data;
-        await setTokenInCookie("accessToken", accessToken);
-        await setTokenInCookie("refreshToken", refreshToken);
-        await setTokenInCookie("better-auth.session_token", token);
-        
-        redirect("/dashboard");
-
-     }catch (error: any) {
+    if (!parsedPayload.success) {
+        const firstError = parsedPayload.error.issues[0].message || "Invalid input";
         return {
-            message: error.message,
             success: false,
-        }
-     }
+            message: firstError,
+        };
     }
+
+    try {
+        const response = await httpClient.post<ILoginResponse>("/auth/login", parsedPayload.data);
+
+        const { accessToken, refreshToken, token, user } = response.data;
+        const { role, emailVerified, needPasswordChange, email } = user;
+
+        await setTokenInCookies("accessToken", accessToken);
+        await setTokenInCookies("refreshToken", refreshToken);
+        await setTokenInCookies("better-auth.session_token", token, 24 * 60 * 60); // 1 day in seconds
+
+        const targetPath = !emailVerified
+            ? `/verify-email?email=${email}`
+            : needPasswordChange
+                ? `/reset-password?email=${email}`
+                : redirectPath && isValidRedirectForRole(redirectPath, role as UserRole)
+                    ? redirectPath
+                    : getDefaultDashboardRoute(role as UserRole);
+
+        return {
+            ...response.data,
+            redirectPath: targetPath,
+        };
+    } catch (error: any) {
+        const message =
+            error?.response?.data?.message ||
+            error?.message ||
+            "Unknown error";
+
+        return {
+            success: false,
+            message: `Login failed: ${message}`,
+        };
+    }
+};
